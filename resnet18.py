@@ -42,42 +42,6 @@ else:
 
 
 
-
-#%%
-#################################################
-# Check our dataset
-#################################################
-
-df.head()
-
-print(f"Total Files: {len(df)}")
-print(f"Unique File Extensions: {df['Extension'].unique()}")
-print(f"Unique Duration: {df['Duration'].unique()}")
-print(f"Min Duration: {df['Duration'].min()}")
-print(f"Max Duration: {df['Duration'].max()}")
-print(f"Unique Channels: {df['Channels'].unique()}")
-print(f"Unique SampleRate: {df['SampleRate'].unique()}")
-
-# Check the distribution of classes
-import matplotlib.pyplot as plt
-import seaborn as sns
-plt.figure(figsize = (5, 10))
-sns.countplot(y = df['class'], palette = 'viridis')
-plt.title('Distribution of Classes', fontsize = 16)
-plt.xlabel('Count', fontsize = 14)
-plt.ylabel('Class', fontsize = 14)
-plt.show()
-
-# Check the distribution of duration
-plt.figure(figsize = (5, 10))
-sns.countplot(y = round(df['Duration'],4), palette = 'viridis')
-plt.title('Distribution of Classes', fontsize = 16)
-plt.xlabel('Count', fontsize = 14)
-plt.ylabel('Class', fontsize = 14)
-plt.show()
-
-
-
 #%%
 ############################################################################
 ############################################################################
