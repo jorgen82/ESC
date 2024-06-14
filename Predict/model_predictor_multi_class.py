@@ -2,7 +2,9 @@ import torch
 import torch.nn.functional as F
 import torchaudio
 from torchaudio import transforms
+import torch.nn as nn
 import random
+import numpy as np
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -142,66 +144,89 @@ def transform(audio_path, model):
         aud = open(audio_path)
         reaud = resample(aud, 44100)
         rechan = rechannel(reaud, 1)
-        dur_aud = pad_trunc(rechan, 5000)
-        sgram = melgram(dur_aud, n_mels=64, n_fft=1024, hop_len=256)
+        sig, sr = pad_trunc(rechan, 5000)
         
-        if str(model).split('(')[0] == 'ResNet':
-            return sgram
-        elif str(model).split('(')[0] == 'CNN':
-            normalized_melgram = normalize(sgram)
-            return normalized_melgram
-        else: print(f"Wrong model provided...")
-        raise
+        # Split the audio into 1-second samples with a 0.5-second overlap
+        split_samples = []
+        duration = 1.0  # 1 second
+        overlap = 0.5  # 0.5 second
+        step = int(sr * (duration - overlap))
+        for start in range(0, len(sig[0]) - sr, step):
+            split_samples.append(sig[0][start:start + sr])
+
+        # Preprocess each split
+        processed_samples = []
+
+        for sample in split_samples:
+            #print(f'Sample: {(sample, sr)}')
+
+            sgram = melgram((sample, sr), n_mels=64, n_fft=1024, hop_len=256)
+            #print(f'sgram: {sgram}')
+            
+            if str(model).split('(')[0] == 'ResNet':
+                processed_samples.append(sgram)
+            elif str(model).split('(')[0] == 'CNN':
+                normalized_melgram = normalize(sgram)
+                processed_samples.append(normalized_melgram)
+            else: 
+                print(f"Wrong model provided...")
+                raise
+        return np.array(processed_samples)
     except Exception as e:
         print(f"Error processing audio file {audio_path}: {e}")
         raise
     
-
+    
 def load_model(model_path):
     model = torch.load(model_path)
     model.eval()
     return model
 
-def predict(audio_path, model):
-    audio = transform(audio_path, model)
-    audio = audio.unsqueeze(0)  # Add batch dimension
-
-    # Perform inference
-    with torch.no_grad():
-        output = model(audio)
-        probabilities = F.softmax(output, dim=1)
-        _, predicted = torch.max(probabilities, 1)
-
-        predicted_label = predicted.item()
-        predicted_class = [key for key, x in classes.items() if x == predicted_label]
-        predicted_probability = probabilities[0, predicted_label].item()
-        
-        # Find the index of the second highest probability
-        sorted_probs, sorted_indices = torch.sort(probabilities, descending=True)
-        second_predicted_label = sorted_indices[0, 1].item()
-        second_predicted_class = [key for key, x in classes.items() if x == second_predicted_label]
-        second_predicted_probability = sorted_probs[0, 1].item()
-        
-    return {
-        "predicted_class": predicted_class,
-        "predicted_probability": predicted_probability,
-        "second_predicted_class": second_predicted_class,
-        "second_predicted_probability": second_predicted_probability
-    }
+def predict_classes(processed_samples, model):
+    predictions = []
+    softmax = nn.Softmax(dim=1)
+    for sample in processed_samples:
+        sample = torch.tensor(sample).unsqueeze(0).unsqueeze(0)
+        output = model(sample)
+        probabilities = softmax(output).detach().numpy()
+        predicted_class = np.argmax(probabilities, axis=1)
+        predictions.append(predicted_class[0])
+    return predictions
       
+def calculate_final_prediction(predictions):
+    unique, counts = np.unique(predictions, return_counts=True)
+    percentages = dict(zip(unique, counts / len(predictions) * 100))
+    percentages = {}
+    for i in range(len(unique)):
+        class_index = unique[i]
+        predicted_class = [key for key, x in classes.items() if x == class_index]
+        percentages[predicted_class[0]] = (counts[i] / len(predictions)) * 100
+    return percentages
 
+
+#model_path = 'C:/Users/george.apostolakis/Downloads/ESC-50/Models/Transfer Learning/resnet_melgram_1_64x860_best_model.pth'
+#audio_path = 'C:/Users/george.apostolakis/Downloads/ESC-50/Test Sound Files/Bird-Dog.ogg'
+
+#model = load_model(model_path)
+
+#processed_samples = transform(audio_path, model)
+#predictions = predict_classes(processed_samples, model)
+#final_prediction = calculate_final_prediction(predictions)
+
+#print("Predictions for each split:", predictions)
+#print("Final prediction percentages:", final_prediction)
     
 def main(model_path, audio_path):
     # Load the model
     model = load_model(model_path)
 
     # Predict the class    
-    predictions = predict(audio_path, model)
-    print(f"Predicted Class: {predictions['predicted_class'][0]}  with a probability of: {predictions['predicted_probability']:.04f}")
-    #print(f"Second Predicted Class: {predictions['second_predicted_class'][0]}  with a probability of: {predictions['second_predicted_probability']:.04f}")
+    processed_samples = transform(audio_path, model)
+    predictions = predict_classes(processed_samples, model)
+    final_prediction = calculate_final_prediction(predictions)
 
-    if predictions['second_predicted_probability'] >= predictions['predicted_probability'] * 0.8:
-        print(f"Second Predicted Class: {predictions['second_predicted_class'][0]}  with a probability of: {predictions['second_predicted_probability']:.04f}")
+    #print("Predictions for each split:", predictions)
+    print("Classes Predicted:", final_prediction)
 
 
 if __name__ == "__main__":
@@ -212,5 +237,3 @@ if __name__ == "__main__":
     model_path = sys.argv[1]
     audio_path = sys.argv[2]
     main(model_path, audio_path)
-    
-    
