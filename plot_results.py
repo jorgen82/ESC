@@ -1,3 +1,9 @@
+"""
+    Plot some visuals 
+    1) plot_confusion_matrix
+    2) plot_validation_accuracy
+    3) plot_validation_loss
+"""
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt

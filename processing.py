@@ -1,4 +1,20 @@
-#import math
+"""
+    Contains the preprocessing steps and the Augmentation techniques
+    Preprocessing:
+        1) AudioUtil: Load the audio file
+        2) rechannel: Convert the audio to the desired number of channels
+        3) resample: Standardise sampling rate
+        4) pad_trunc: Pad or truncate to a 'max_ms' in milliseconds
+        5) melgram: Generate a Melgram
+        6) normalize: Normalize the output
+    Augmentation:
+        1)time_shift: Shifts the signal to the left or right by some percent and wrap around if needed
+        2) add_noise: Add noise to the audio signal to simulate different noise conditions.
+        3) volume_scaling: Change the volume of the audio signal by scaling it up or down. 
+        4) time_stretching: Change the duration of the audio signal by speeding it up or slowing it down. 
+        5) melgram_augment: Augment the Spectrogram by masking out some sections of it in both the frequency dimension
+"""
+
 import random
 import numpy as np
 import librosa
@@ -94,6 +110,7 @@ class AudioUtil():
         #spec = transforms.AmplitudeToDB()(spec)        
         return (spec)
     
+    # Normalize the output
     @staticmethod
     def normalize(melgram):
          # Calculate mean and standard deviation across all dimensions

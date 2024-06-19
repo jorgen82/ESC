@@ -1,3 +1,10 @@
+"""
+    Its used to create the dataset, by applying all the selected preprocessing steps.
+
+Returns:
+    spectogram and label
+"""
+
 from torch.utils.data import DataLoader, Dataset, random_split
 import torch.nn
 #import torchaudio
@@ -36,6 +43,8 @@ class SoundCustomDS(Dataset):
         
         # Interpolate dataset (from (64, 860) to (860, 860)
         #mel_spectrogram_resized = torch.nn.functional.interpolate(sgram.unsqueeze(0), size=(num_frames, num_frames), mode='bicubic').squeeze(0)
+        
+        # Mask the sgram
         #aug_sgram = audio_util.melgram_augment(sgram, max_mask_pct=0.1, n_freq_masks=2, n_time_masks=2)
         
         normalized_melgram = audio_util.normalize(sgram)

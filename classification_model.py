@@ -1,9 +1,18 @@
+"""
+    Creates the classification models which we will use on our experiments
+    1) CNN: This is a custom cnn model
+    2) CNN_square: This is for testing the 860x860 melgrams rather than the 64x860 which is the original size - dataset should be altered to contain relevant processing function
+    3) CombinedModel: This is a combination of pretrained Resnet18 with a custom CNN (defined on the CustomCNN class)
+    4) VGGishClassifier: Pretrained VGGish model. - Did not use this on our final experiments.
+    5) EarlyStopping: A class for early stopping of the training (if its not improving for 5 consecutive epochs) - Did not use this on our final experiments.
+"""
+
 import torch
 import torch.nn as nn
 import numpy as np
 import torchvision.models as models
 import torch.nn.functional as F
-#from torch.nn import init
+
 
 
 # ----------------------------

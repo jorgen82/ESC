@@ -1,3 +1,14 @@
+"""
+    This is used for the initial steps of the project.
+    1) FileMover: Moves the test files to separate directory.
+    2) initialize_folder: Deletes the directory contents and creates the structure. used for exporting the images as per next functions.
+    3) create_images: Create and export visuals for wave, melgram and MFCC.
+    4) file_exploration: Records all the necessary details of the files and calls the create_images in order to export the visuals.
+    5) combine_audio_visuals: Create a big visual which contains the visuals for all the files. This is to be able to have a first look on possible similarities.
+    6) data_augmentation: Create new files by apply some processing steps
+
+"""
+
 import os
 import shutil
 import random
