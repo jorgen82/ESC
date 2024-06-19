@@ -1,3 +1,19 @@
+"""
+    This is the main script. Will perform the below steps:
+    1) Load or create the dataframe with the file info (based on the read_dataset)
+        In case of creation, it will create the dataframe and export the visuals (if export_audio_visuals = True) 
+        It will also create augmented files (if augment_data = True)
+    2) We will see some simple visuals and info in order to see the class distibution along with duration and channel info.
+    3) We define the train and validate functions.
+        Training and validation will be handled by train_val function
+        train_val is called by the objective function, which is the one which will handle the Optuna trials
+    4) Training results will be displayed along with the best hyperparameters, validation accuracy and loss visuals
+        Hyperparameters and results of each epoch (acc, loss) will also be saved to files for later evaluation of our different experiments
+    5) Test the model
+        Also show the confusion matrix
+        Create a dataframe with all the probalities and the predicted class (also shows ore than one class if closer to a threshold with the predicted)
+     
+"""
 #%%
 import pandas as pd
 from initialize import file_exploration, combine_audio_visuals, data_augmentation, FileMover
@@ -335,12 +351,11 @@ study.optimize(objective, n_trials=10)
 objective.df_train_val_results['total_time_seconds'] = (objective.df_train_val_results['end_time'] - objective.df_train_val_results['start_time']).dt.total_seconds()
 objective.df_train_val_results.to_csv(models_directory + model_name + '.csv', index=False)
 
-
 # Access the best hyperparameters found by Optuna
 best_params = study.best_params
 print(f'The best hyperparameters are: {best_params}')
 
-# Export parameters
+# Export parameters to a text file
 export_var = {
     'lr': best_params['lr'],
     'batch_size': best_params['batch_size'],
@@ -356,6 +371,7 @@ with open(models_directory + model_name + '_parameters.txt', 'w') as file:
 # Plot Validation Accuracy and Loss visuals
 plot_validation_accuracy(objective.df_train_val_results)
 plot_validation_loss(objective.df_train_val_results)
+
 
 
 
@@ -400,7 +416,8 @@ print(f'Test Accuracy: {test_accuracy:.2f}%')
 plot_confusion_matrix(df_test, true_labels, predicted_labels)
 
 
-# Export the probabilities per class
+# Export the probabilities per class. This is to be able to evaluate if there are classes that are predicted with high confidence 
+# or classes closed to each other.
 class_names = df_test['class'].unique()
 class_names = sorted(class_names)
 
@@ -428,11 +445,11 @@ def predict(model, dataloader, device, true_labels):
     return all_probs, predicted_labels
 
 
+# Get the top classes that are closer to each other to a specific threshold 
 def get_top_classes_within_threshold(row, threshold=0.2):
     top_prob = row.max()
     within_threshold = row[row >= top_prob * (1 - threshold)].sort_values(ascending=False).index.tolist()
     return within_threshold
-
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
@@ -440,12 +457,10 @@ model.to(device)
 true_labels = df_test['class'].values
 probabilities, predicted_labels = predict(model, test_dl, device, true_labels)
 
-
 probs_df = pd.DataFrame(probabilities, columns=class_names)
 predicted_labels = probs_df.idxmax(axis=1)
 
 top_classes_within_20_percent = probs_df.apply(get_top_classes_within_threshold, axis=1)
-
 
 # Create the final DataFrame
 probabilities_df = pd.concat([df_test[['File Name', 'class']].reset_index(drop=True), 
