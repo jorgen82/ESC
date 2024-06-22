@@ -1,6 +1,6 @@
 """
     This is used for the initial steps of the project.
-    1) FileMover: Moves the test files to separate directory.
+    1) FileMover: Moves the test files to separate directory based on the subset_percentage (train/test split).
     2) initialize_folder: Deletes the directory contents and creates the structure. used for exporting the images as per next functions.
     3) create_images: Create and export visuals for wave, melgram and MFCC.
     4) file_exploration: Records all the necessary details of the files and calls the create_images in order to export the visuals.
@@ -23,12 +23,18 @@ from processing import AudioUtil
 import torchaudio
 import soundfile as sf
 
+# Moves the test files to separate directory based on the subset_percentage (train/test split).
+# source_dir: The source directory
+# destination_dir: The directory to move the files to
+# subset_percentage: The percentage of the files to be moved
+# augment_data: If we will augment data (therefore the remaining date will be duplicated), then we will mupliply the subset_percentage with 1.625 in order to able to get a move percentage close to the one we want
 class FileMover:
-    def __init__(self, df, source_dir, destination_dir, subset_percentage):
+    def __init__(self, df, source_dir, destination_dir, subset_percentage, augment_data):
         self.df = df
         self.source_dir = source_dir
         self.destination_dir = destination_dir
-        self.subset_percentage = subset_percentage
+        self.augment_pct = 1.625 if augment_data else 1
+        self.subset_percentage = subset_percentage * self.augment_pct
 
     def move_files_with_subset(self):
         if os.path.exists(self.destination_dir):
@@ -53,7 +59,8 @@ class FileMover:
             shutil.move(src_file, dest_file)
             self.df.at[index, 'Subfolder_Path'] = row['Subfolder_Path'].replace(self.source_dir, self.destination_dir)
 
-                
+
+# Deletes the directory contents and creates the structure. used for exporting the images as per next functions.               
 def initialize_folder(output_root_folder):
     if os.path.exists(output_root_folder):
         for root, dirs, files in os.walk(output_root_folder):
@@ -70,6 +77,7 @@ def initialize_folder(output_root_folder):
                     print(f'Failed to delete directory: {e}') 
                     sys.exit(0)
 
+# Create and export visuals for wave, melgram and MFCC.
 def create_images(audio_file, output_path):
     y, sr = librosa.load(audio_file)  # Load the audio file
     mel_spec = librosa.feature.melspectrogram(y=y, sr=sr)  # Compute mel spectrogram
@@ -120,8 +128,14 @@ def create_images(audio_file, output_path):
     plt.subplots_adjust(hspace=0)
     plt.savefig(output_path[3])  # Save as image file
     plt.close()
-                        
-def file_exploration(source_dir, output_root_folders, export_audio_visuals = True):
+    
+
+# Records all the necessary details of the files and calls the create_images in order to export the visuals.
+# source_dir: The directory to scan and get the file info.
+# output_root_folders: The list of folders that the audio visuals will be exported.
+# file_name_filter: If we look for files with specific name. This is used to be called for gathering the info for the Augmented files, since augmentation will be after the initial gathering of information and the test file move takes place.
+# export_audio_visuals: If we want to export the audio visuals, or jsut to create the dataframe with the info
+def file_exploration(source_dir, output_root_folders, file_name_filter = None, export_audio_visuals = True):
     audio_extensions = ['.mp3', '.wav', '.flac', '.ogg']  # Add more extensions if needed
     matrix = []
     # If we want to export audio visuals, we first delete output folder contents
@@ -134,25 +148,27 @@ def file_exploration(source_dir, output_root_folders, export_audio_visuals = Tru
             subfolder_path = os.path.join(source_dir, subfolder).replace("\\", "/")
             for file in os.listdir(subfolder_path):
                 if os.path.isfile(os.path.join(subfolder_path, file)) and os.path.splitext(file)[1] in audio_extensions:
-                    audio_file = os.path.join(subfolder_path, file).replace("\\", "/")
-                    audio_data, sample_rate = librosa.load(os.path.join(audio_file))
-                    duration = librosa.get_duration(y=audio_data, sr=sample_rate)
-                    channels = len(audio_data.shape)
-                    matrix.append([subfolder, subfolder_path, file, os.path.splitext(file)[1][1:], duration, channels, sample_rate])
-    
-                    if export_audio_visuals:
-                        image_files = []  
-                        image_folders = []                     
-                        for folder in output_root_folders: 
-                            image_folder = folder + '/' + subfolder
-                            image_folders.append(image_folder) 
-                            os.makedirs(image_folder, exist_ok=True) 
-                            file_name = os.path.splitext(file)[0]
-                            image_files.append(image_folder + '/' + f"{file_name}.jpg")
-                        create_images(audio_file, image_files)
+                    if file_name_filter is None or file_name_filter in file:
+                        audio_file = os.path.join(subfolder_path, file).replace("\\", "/")
+                        audio_data, sample_rate = librosa.load(os.path.join(audio_file))
+                        duration = librosa.get_duration(y=audio_data, sr=sample_rate)
+                        channels = len(audio_data.shape)
+                        matrix.append([subfolder, subfolder_path, file, os.path.splitext(file)[1][1:], duration, channels, sample_rate])
+        
+                        if export_audio_visuals:
+                            image_files = []  
+                            image_folders = []                     
+                            for folder in output_root_folders: 
+                                image_folder = folder + '/' + subfolder
+                                image_folders.append(image_folder) 
+                                os.makedirs(image_folder, exist_ok=True) 
+                                file_name = os.path.splitext(file)[0]
+                                image_files.append(image_folder + '/' + f"{file_name}.jpg")
+                            create_images(audio_file, image_files)
     return matrix
 
 
+#Create a big visual which contains the visuals for all the files. This is to be able to have a first look on possible similarities.
 def combine_audio_visuals(folder, output_folder):
     # Get all subfolders in the root folder
     subfolders = [f.path for f in os.scandir(folder) if f.is_dir()]
@@ -185,6 +201,7 @@ def combine_audio_visuals(folder, output_folder):
     plt.show()
     
 
+# Create new files by apply some processing steps
 def data_augmentation(source_dir):
     audio_extensions = ['.mp3', '.wav', '.flac', '.ogg']  # Add more extensions if needed
     for root, dirs, _ in os.walk(source_dir):

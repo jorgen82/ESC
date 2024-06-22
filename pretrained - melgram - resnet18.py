@@ -1,5 +1,5 @@
 """
-    This is the main script. Will perform the below steps:
+    Basically this is like the main script, but it utilizes the pretrained resnet18 model
     1) Load or create the dataframe with the file info (based on the read_dataset)
         In case of creation, it will create the dataframe and export the visuals (if export_audio_visuals = True) 
         It will also create augmented files (if augment_data = True)
@@ -14,7 +14,6 @@
         Create a dataframe with all the probalities and the predicted class (also shows ore than one class if closer to a threshold with the predicted)
      
 """
-#%%
 import pandas as pd
 from initialize import file_exploration, combine_audio_visuals, data_augmentation, FileMover
 from sklearn import preprocessing 
@@ -25,7 +24,7 @@ export_audio_visuals = True
 augment_data = False
 
 # Path initialization
-model_name = 'cnn'
+model_name = 'pretrained_resnet18'
 root_path = 'C:/Users/george.apostolakis/Downloads/ESC-50/'
 source_directory = root_path + 'Sound Files'
 melgram_output_root_folder = root_path + 'Melgrams'
@@ -123,8 +122,8 @@ from torch.utils.data import DataLoader, random_split
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import init
-from classification_model import CNN, EarlyStopping, CombinedModel
-from sklearn.metrics import accuracy_score
+#from classification_model import AlexNet, CNN, EarlyStopping
+import torchvision.models as models
 from plot_results import plot_confusion_matrix, plot_validation_accuracy, plot_validation_loss
 import optuna
 from sklearn.metrics import confusion_matrix
@@ -138,11 +137,11 @@ import graphviz
 import datetime
 import warnings
 import ast
-
 pd.set_option('display.float_format', '{:.8f}'.format)
 warnings.filterwarnings("ignore")
 
 df_train = df[df['train_test'] == 'train'].reset_index()
+df_test = df[df["train_test"]=="test"].reset_index()
 
 duration = 5000
 sr = 44100
@@ -169,13 +168,7 @@ train_ds, val_ds = random_split(mydataset, [num_train, num_val])
 #    print(f"Shape of y: {len(y)}")
 #    break
     
-# Create the model and put it on the GPU if available
-num_classes=50
-model = CNN(num_classes)
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-model = model.to(device)
-next(model.parameters()).device
-   
+
 # Print model summary  
 #os.environ["PATH"] += os.pathsep + 'C:/Program Files/Graphviz/bin/'
 #summary(model, input_size=(1, 64, 860))
@@ -194,6 +187,7 @@ def train(model, device, train_loader, optimizer, epoch, loss_criteria):
     # Process the images in batches
     for batch_idx, (data, target) in enumerate(train_loader):
         # Use the CPU or GPU as appropriate
+        # Recall that GPU is optimized for the operations we are dealing with
         data, target = data.to(device), target.to(device)
 
         # Reset the optimizer
@@ -267,13 +261,16 @@ def validate(model, device, test_loader, loss_criteria):
 
 def train_val(model, device, epochs, lr, batch_size, train_dl, val_dl):
     # Instantiate the EarlyStopping class
+    #early_stopping = EarlyStopping(patience=5)
     early_stopping_patience = 5
     best_val_acc = 0.0
     epochs_no_improve = 0
     
     # Define loss function and optimizer
     loss_criteria = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=0.001)
+    #optimizer = optim.Adam(model.parameters(), lr=lr)
+    # Only optimize the parameters that are not frozen
+    optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
     
     # Track metrics in these arrays
     train_val_results = []
@@ -287,6 +284,11 @@ def train_val(model, device, epochs, lr, batch_size, train_dl, val_dl):
         
         # Report intermediate results to Optuna
         #trial.report(val_loss, epoch)
+        
+        #early_stopping(val_loss, model)
+        #if early_stopping.early_stop:
+        #    print("Early stopping")
+        #    break  
         
         if val_acc > best_val_acc:
             print(f'Validation accuracy increased ({best_val_acc:.6f} --> {val_acc:.6f}).')
@@ -309,7 +311,31 @@ def objective(trial):
     lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
     batch_size = trial.suggest_categorical("batch_size", [32, 64, 128])
     epochs = 100
+    
+    # Define the model
+    num_classes=50
+    # Load pre-trained ResNet18 model
+    model = models.resnet18(pretrained=True)
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+    
+    # Modify the first convolutional layer to accept single-channel (64x860) input
+    model.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
 
+    # Modify the final fully connected layer to output 50 classes (ESC-50 has 50 categories)
+    num_ftrs = model.fc.in_features
+    model.fc = nn.Linear(num_ftrs, num_classes)
+
+    # Freeze all layers
+    for param in model.parameters():
+        param.requires_grad = False
+
+    # Unfreeze the parameters of the last two layers
+    #for param in model.layer4.parameters():
+    #    param.requires_grad = True
+    for param in model.fc.parameters():
+        param.requires_grad = True
+    
     print('***********************************************************************************')
     print(f'Trial number: {trial.number + 1}')
     print(f'Hyperparameters ----> Epochs: {epochs},   LR: {lr},   Batch Size: {batch_size}')
@@ -354,25 +380,6 @@ objective.df_train_val_results.to_csv(models_directory + model_name + '.csv', in
 # Access the best hyperparameters found by Optuna
 best_params = study.best_params
 print(f'The best hyperparameters are: {best_params}')
-
-# Export parameters to a text file
-export_var = {
-    'lr': best_params['lr'],
-    'batch_size': best_params['batch_size'],
-    'duration': duration,
-    'sr': sr,
-    'channel': channel
-}
-export_var_str = str(export_var)
-with open(models_directory + model_name + '_parameters.txt', 'w') as file:
-    file.write(export_var_str)
-
-
-# Plot Validation Accuracy and Loss visuals
-plot_validation_accuracy(objective.df_train_val_results)
-plot_validation_loss(objective.df_train_val_results)
-
-
 
 
 ##############################################################################

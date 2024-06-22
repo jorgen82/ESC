@@ -70,7 +70,7 @@ def plot_validation_accuracy(df):
         min_val_acc = group.loc[max_val_acc_idx, 'val_acc']
         lr = group.loc[max_val_acc_idx, 'lr']
         batch_size = group.loc[max_val_acc_idx, 'batch_size']
-        ax.annotate(f'Min Val Acc: {min_val_acc:.4f}\nLR: {lr}\nBatch Size: {batch_size}',
+        ax.annotate(f'Max Val Acc: {min_val_acc:.4f}\nLR: {lr}\nBatch Size: {batch_size}',
                     xy=(1, 0), xycoords='axes fraction',
                     xytext=(-5, 5), textcoords='offset points',
                     ha='right', va='bottom')
